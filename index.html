@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>IT IS FOOTBALL NOT SOCCER</title>
+    <style>
+        :root { --p1: #00e5ff; --p2: #ff2d55; --gold: #ffcc00; --pitch: #0a1b0a; }
+        body { margin: 0; background: #000; color: #eee; font-family: 'Segoe UI', sans-serif; overflow: hidden; user-select: none; }
+        
+        /* --- HUD --- */
+        .hud {
+            width: 100%; height: 110px; background: linear-gradient(180deg, #111 0%, #000 100%);
+            display: flex; justify-content: space-around; align-items: center; border-bottom: 4px solid #222;
+            z-index: 50; position: relative;
+        }
+        .score-box { font-size: 70px; font-weight: 900; font-family: 'Impact'; display: flex; align-items: center; gap: 40px; }
+        #timer { font-size: 26px; color: var(--gold); border: 2px solid #444; padding: 5px 20px; border-radius: 12px; background: #050505; min-width: 80px; text-align: center; }
+        .bar-rail { width: 300px; height: 14px; background: #222; border-radius: 7px; border: 1px solid #555; overflow: hidden; margin-top: 8px; }
+        .bar-fill { height: 100%; width: 0%; transition: width 0.3s ease; }
+
+        /* --- OVERLAYS --- */
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, #1a1c2c 0%, #000 100%);
+            display: flex; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .card {
+            background: rgba(5, 5, 10, 0.98); padding: 50px; border-radius: 45px;
+            border: 2px solid #333; text-align: center; box-shadow: 0 0 120px #000; width: 520px;
+        }
+        input { padding: 18px; margin: 10px; border-radius: 15px; border: 2px solid #333; background: #000; color: #fff; font-size: 20px; width: 85%; outline: none; transition: 0.4s; }
+        input.error { border-color: #ff3333; box-shadow: 0 0 15px #ff3333; }
+        
+        .ai-control { margin: 25px 0; display: flex; align-items: center; justify-content: center; gap: 15px; font-weight: 900; }
+        .switch { position: relative; width: 65px; height: 36px; cursor: pointer; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #333; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 28px; width: 28px; left: 4px; bottom: 4px; background: #fff; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background: var(--p2); }
+        input:checked + .slider:before { transform: translateX(28px); }
+
+        .btn {
+            padding: 20px 70px; font-size: 26px; background: var(--gold); color: #000;
+            border: none; border-radius: 100px; cursor: pointer; font-weight: 900;
+            text-transform: uppercase; margin-top: 25px; transition: 0.3s;
+        }
+        .btn:hover { transform: scale(1.05); box-shadow: 0 10px 40px rgba(255,204,0,0.4); }
+
+        #goal-popup {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0);
+            text-align: center; z-index: 2000; pointer-events: none; transition: 0.5s cubic-bezier(0.17, 0.89, 0.32, 1.49);
+        }
+        .goal-msg { font-size: 150px; font-weight: 950; font-style: italic; color: var(--gold); line-height: 0.8; text-shadow: 0 0 30px #000; }
+        
+        canvas { display: block; margin: 0 auto; background: var(--pitch); border: 10px solid #1a1a1a; }
+    </style>
+</head>
+<body>
+
+    <div class="hud">
+        <div>
+            <div id="p1-name-display" style="color: var(--p1); font-weight: 900;">PLAYER 1</div>
+            <div class="bar-rail"><div id="e1" class="bar-fill" style="background: var(--p1);"></div></div>
+        </div>
+        <div class="score-box">
+            <span id="s1-ui" style="color: var(--p1)">0</span>
+            <div id="timer">02:00</div>
+            <span id="s2-ui" style="color: var(--p2)">0</span>
+        </div>
+        <div style="text-align: right;">
+            <div id="p2-name-display" style="color: var(--p2); font-weight: 900;">PLAYER 2</div>
+            <div class="bar-rail"><div id="e2" class="bar-fill" style="background: var(--p2); float: right;"></div></div>
+        </div>
+    </div>
+
+    <div id="start-screen" class="overlay">
+        <div class="card">
+            <h1 style="color: var(--gold); font-size: 42px; margin: 0; font-family: Impact; line-height: 1.1;">IT IS FOOTBALL<br>NOT SOCCER</h1>
+            <p style="color: #666; letter-spacing: 5px; margin: 20px 0;">CROWD & PHYSICS ENGINE</p>
+            
+            <input type="text" id="p1-in" placeholder="Your Name (P1)">
+            <input type="text" id="p2-in" placeholder="Rival Name (P2)">
+            
+            <div class="ai-control">
+                <span>PVP</span>
+                <label class="switch"><input type="checkbox" id="ai-toggle" checked onchange="Game.toggleAIUI()"><span class="slider"></span></label>
+                <span style="color: var(--p2)">CPU-BOT</span>
+            </div>
+            
+            <button class="btn" onclick="Game.validateAndStart()">KICK OFF</button>
+            <p id="error-msg" style="color: #ff3333; font-size: 14px; margin-top: 15px; visibility: hidden; font-weight: bold;">* Enter name to start!</p>
+        </div>
+    </div>
+
+    <div id="end-screen" class="overlay" style="display: none;">
+        <div class="card">
+            <h1 id="winner-text" style="color: var(--gold); font-size: 55px; margin: 0;">PLAYER 1 WINS!</h1>
+            <div style="font-size: 35px; margin: 20px 0;" id="final-score">0 - 0</div>
+            <button class="btn" onclick="location.reload()">REMATCH</button>
+        </div>
+    </div>
+
+    <div id="goal-popup">
+        <div class="goal-msg">GOAL!!!!</div>
+        <div id="scorer-name" style="font-size: 70px; color: #fff; text-transform: uppercase; font-weight: 900;">PLAYER</div>
+    </div>
+
+    <canvas id="arena" width="1200" height="600"></canvas>
+
+<script>
+/**
+ * THE FOOTBALL ENGINE
+ * Dynamic Crowd Logic, Solid Bodies, Professional Physics
+ */
+
+const WORLD = { G: 0.45, F: 0.988, B: 0.75, GROUND: 565, CEILING: 30, GOAL_H: 220, MATCH_TIME: 120 };
+
+class Crowd {
+    constructor() {
+        this.fans = [];
+        for(let i=0; i<150; i++) {
+            this.fans.push({
+                x: Math.random() * 1200,
+                y: 50 + Math.random() * 80,
+                baseY: 50 + Math.random() * 80,
+                color: Math.random() > 0.5 ? '#00e5ff' : '#ff2d55',
+                jump: 0,
+                phase: Math.random() * Math.PI * 2
+            });
+        }
+    }
+    update(isGoal) {
+        this.fans.forEach(f => {
+            if(isGoal) {
+                f.jump = Math.abs(Math.sin(Date.now() * 0.02 + f.phase)) * 25;
+            } else {
+                f.jump = Math.abs(Math.sin(Date.now() * 0.005 + f.phase)) * 5;
+            }
+            f.y = f.baseY - f.jump;
+        });
+    }
+    draw(ctx) {
+        this.fans.forEach(f => {
+            ctx.fillStyle = f.color;
+            ctx.globalAlpha = 0.4;
+            ctx.beginPath();
+            ctx.arc(f.x, f.y, 4, 0, Math.PI*2);
+            ctx.fill();
+        });
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class Athlete {
+    constructor(x, color, name, id, isAI, binds) {
+        this.pos = {x: x, y: 400};
+        this.vel = {x: 0, y: 0};
+        this.r = 46; this.color = color; this.name = name;
+        this.id = id; this.isAI = isAI; this.binds = binds;
+        this.score = 0; this.energy = 0; this.ult = false;
+        this.grounded = true;
+    }
+    reset(side) {
+        this.pos = {x: side === 1 ? 220 : 980, y: 400};
+        this.vel = {x:0, y:0}; this.ult = false;
+    }
+    update(ball, keys, other) {
+        if(this.isAI) this.runAI(ball); else this.handleKeys(keys);
+        this.vel.x *= 0.88; this.vel.y += WORLD.G;
+        this.pos.x += this.vel.x; this.pos.y += this.vel.y;
+        if(this.pos.y > WORLD.GROUND - this.r) { this.pos.y = WORLD.GROUND - this.r; this.vel.y = 0; this.grounded = true; }
+        if(this.pos.x < this.r) this.pos.x = this.r;
+        if(this.pos.x > 1200 - this.r) this.pos.x = 1200 - this.r;
+        
+        let dx = this.pos.x - other.pos.x;
+        let dy = this.pos.y - other.pos.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        if(dist < this.r + other.r) {
+            let overlap = (this.r + other.r) - dist;
+            this.pos.x += (dx/dist) * (overlap/2);
+            other.pos.x -= (dx/dist) * (overlap/2);
+            this.vel.x += (dx/dist) * 4;
+            other.vel.x -= (dx/dist) * 4;
+        }
+        if(this.ult) { this.energy -= 0.85; if(this.energy <= 0) this.ult = false; }
+    }
+    handleKeys(k) {
+        if(k[this.binds.L]) this.vel.x -= 1.5;
+        if(k[this.binds.R]) this.vel.x += 1.5;
+        if(k[this.binds.U] && this.grounded) { this.vel.y = -16.5; this.grounded = false; }
+        if(k[this.binds.ULT] && this.energy >= 100) this.ult = true;
+    }
+    runAI(b) {
+        let tx = b.pos.x;
+        if(this.id === 2 && b.pos.x < 450) tx = 1100;
+        if(this.pos.x < tx - 10) this.vel.x += 1.3;
+        else if(this.pos.x > tx + 10) this.vel.x -= 1.3;
+        if(b.pos.y < this.pos.y - 70 && Math.abs(this.pos.x - b.pos.x) < 100 && this.grounded) {
+            this.vel.y = -15.5; this.grounded = false;
+        }
+        if(this.energy >= 100 && Math.abs(this.pos.x - b.pos.x) < 80) this.ult = true;
+    }
+    draw(ctx, bp) {
+        ctx.save();
+        if(this.ult) { ctx.shadowBlur = 40; ctx.shadowColor = "white"; }
+        ctx.fillStyle = this.color;
+        ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.r, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = 6; ctx.stroke();
+        let ang = Math.atan2(bp.y - this.pos.y, bp.x - this.pos.x);
+        ctx.fillStyle = "#fff";
+        let ex = Math.cos(ang)*15, ey = Math.sin(ang)*10;
+        ctx.beginPath(); ctx.arc(this.pos.x+ex-13, this.pos.y+ey-6, 11, 0, Math.PI*2); ctx.arc(this.pos.x+ex+13, this.pos.y+ey-6, 11, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = "#000";
+        ctx.beginPath(); ctx.arc(this.pos.x+ex*1.3-13, this.pos.y+ey*1.3-6, 5, 0, Math.PI*2); ctx.arc(this.pos.x+ex*1.3+13, this.pos.y+ey*1.3-6, 5, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+    }
+}
+
+class Ball {
+    constructor() { this.pos = {x:600, y:100}; this.vel = {x:0, y:0}; this.r = 24; }
+    update(isGoal) {
+        if(isGoal) { this.vel.y = -14; this.pos.y += this.vel.y; return; }
+        this.vel.y += WORLD.G; this.vel.x *= WORLD.F;
+        this.pos.x += this.vel.x; this.pos.y += this.vel.y;
+        if(this.pos.y > WORLD.GROUND-this.r) { this.pos.y = WORLD.GROUND-this.r; this.vel.y *= -WORLD.B; }
+        if(this.pos.y < WORLD.CEILING+this.r) { this.pos.y = WORLD.CEILING+this.r; this.vel.y *= -WORLD.B; }
+        let goalArea = this.pos.y > WORLD.GROUND - WORLD.GOAL_H;
+        if(this.pos.x < 0 && goalArea) Game.goal(2);
+        else if(this.pos.x < this.r && !goalArea) { this.pos.x = this.r; this.vel.x *= -WORLD.B; }
+        if(this.pos.x > 1200 && goalArea) Game.goal(1);
+        else if(this.pos.x > 1200-this.r && !goalArea) { this.pos.x = 1200-this.r; this.vel.x *= -WORLD.B; }
+    }
+    draw(ctx) {
+        ctx.fillStyle = "#fff"; ctx.shadowBlur = 25; ctx.shadowColor = "#fff";
+        ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.r, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+}
+
+const Game = {
+    active: false, isGoal: false, time: WORLD.MATCH_TIME, shake: 0,
+    toggleAIUI() { document.getElementById("p2-in").style.display = document.getElementById("ai-toggle").checked ? "none" : "inline-block"; },
+    validateAndStart() {
+        const p1 = document.getElementById("p1-in"), p2 = document.getElementById("p2-in"), ai = document.getElementById("ai-toggle").checked;
+        if(!p1.value || (!ai && !p2.value)) { document.getElementById("error-msg").style.visibility = "visible"; return; }
+        this.init();
+    },
+    init() {
+        this.canvas = document.getElementById("arena"); this.ctx = this.canvas.getContext("2d");
+        this.keys = {}; window.onkeydown = e => this.keys[e.code] = true; window.onkeyup = e => this.keys[e.code] = false;
+        let ai = document.getElementById("ai-toggle").checked;
+        this.p1 = new Athlete(220, "#00e5ff", document.getElementById("p1-in").value, 1, false, {U:'KeyW', L:'KeyA', R:'KeyD', ULT:'KeyQ'});
+        this.p2 = new Athlete(980, "#ff2d55", ai ? "CPU-BOT" : document.getElementById("p2-in").value, 2, ai, {U:'ArrowUp', L:'ArrowLeft', R:'ArrowRight', ULT:'KeyP'});
+        this.ball = new Ball(); this.crowd = new Crowd();
+        document.getElementById("p1-name-display").innerText = this.p1.name;
+        document.getElementById("p2-name-display").innerText = this.p2.name;
+        document.getElementById("start-screen").style.display = "none";
+        this.active = true;
+        this.timer = setInterval(() => { if(this.active && !this.isGoal && this.time > 0) this.time--; }, 1000);
+        this.loop();
+    },
+    goal(team) {
+        if(this.isGoal) return; this.isGoal = true; this.shake = 30;
+        let s = (team === 1) ? this.p1 : this.p2; s.score++;
+        document.getElementById("scorer-name").innerText = s.name;
+        document.getElementById("goal-popup").style.transform = "translate(-50%, -50%) scale(1)";
+        setTimeout(() => {
+            document.getElementById("goal-popup").style.transform = "translate(-50%, -50%) scale(0)";
+            this.p1.reset(1); this.p2.reset(2);
+            this.ball.pos = {x: team === 1 ? 850 : 350, y: 200}; this.ball.vel = {x:0, y:0};
+            this.isGoal = false;
+        }, 2200);
+    },
+    update() {
+        if(!this.active) return;
+        if(this.time <= 0 && !this.isGoal) { this.active = false; document.getElementById("end-screen").style.display = "flex"; document.getElementById("winner-text").innerText = this.p1.score > this.p2.score ? this.p1.name + " WINS!" : (this.p2.score > this.p1.score ? this.p2.name + " WINS!" : "DRAW!"); document.getElementById("final-score").innerText = this.p1.score + " - " + this.p2.score; return; }
+        this.ball.update(this.isGoal); this.crowd.update(this.isGoal);
+        if(!this.isGoal) {
+            this.p1.update(this.ball, this.keys, this.p2); this.p2.update(this.ball, this.keys, this.p1);
+            [this.p1, this.p2].forEach(p => {
+                let dx = this.ball.pos.x - p.pos.x, dy = this.ball.pos.y - p.pos.y, d = Math.sqrt(dx*dx+dy*dy);
+                if(d < p.r + this.ball.r) {
+                    let a = Math.atan2(dy, dx), pw = p.ult ? 30 : 17;
+                    this.ball.vel.x = Math.cos(a) * pw + p.vel.x; this.ball.vel.y = Math.sin(a) * pw + p.vel.y;
+                    p.energy = Math.min(100, p.energy + 16);
+                }
+            });
+        }
+        document.getElementById("s1-ui").innerText = this.p1.score; document.getElementById("s2-ui").innerText = this.p2.score;
+        document.getElementById("e1").style.width = this.p1.energy + "%"; document.getElementById("e2").style.width = this.p2.energy + "%";
+        document.getElementById("timer").innerText = Math.floor(this.time/60) + ":" + (this.time%60).toString().padStart(2,'0');
+    },
+    draw() {
+        this.ctx.save(); if(this.shake > 0) { this.ctx.translate(Math.random()*this.shake, Math.random()*this.shake); this.shake *= 0.9; }
+        this.ctx.clearRect(0,0,1200,600); this.crowd.draw(this.ctx);
+        this.ctx.strokeStyle = "rgba(255,255,255,0.1)"; this.ctx.lineWidth = 4;
+        this.ctx.strokeRect(50, 50, 1100, 515); this.ctx.beginPath(); this.ctx.moveTo(600, 50); this.ctx.lineTo(600, 565); this.ctx.stroke();
+        this.ctx.strokeStyle = "#fff"; this.ctx.strokeRect(-5, WORLD.GROUND - 220, 90, 220); this.ctx.strokeRect(1115, WORLD.GROUND - 220, 90, 220);
+        this.p1.draw(this.ctx, this.ball.pos); this.p2.draw(this.ctx, this.ball.pos); this.ball.draw(this.ctx);
+        this.ctx.restore();
+    },
+    loop() { if(this.active || this.isGoal) { this.update(); this.draw(); requestAnimationFrame(() => this.loop()); } }
+};
+Game.toggleAIUI();
+</script>
+</body>
+</html>
